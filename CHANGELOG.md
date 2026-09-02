@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Document the Schedule-reconciliation Blueprint's triggers, conditions,
+  supported block data, complete schedules, inputs, confirmation behavior, and
+  manual-override semantics.
+
 ## [0.3.0] - 2026-09-02
 
 ### Added
