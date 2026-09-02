@@ -1,20 +1,31 @@
 # Changelog
 
-## [Unreleased]
-
-### Breaking Changes
+## [0.3.0] - 2026-09-02
 
 ### Added
 
-- Initial SEC Smart cloud integration with Config Flow, discovery, telemetry, diagnostics and opt-in fan control.
-- Documented a native Home Assistant Schedule-helper design that replaces the five-slot vendor timer limit with reconciled weekly blocks.
+- Persistent per-area Home Assistant Schedule override switches.
+- Reusable Schedule-reconciliation Blueprint with confirmation and failure actions.
+- Cloud connection, endpoint health, vendor timer ownership, per-area Snooze, last-command, and last-update entities.
+- Opt-in CO2/humidity thresholds, Snooze duration, summer mode, and filter-lifetime controls.
+- Disabled-by-default filter-life reset button.
+- Gateway/controller metadata and privacy-redacted diagnostics.
+- CI, MIT license, typed API payload models, and broader API/normalization tests.
 
 ### Changed
 
+- Split fast operational polling from slower notifications and metadata polling.
+- Serialize per-area writes and confirm all area/settings changes through cloud read-back.
+- Retry bounded transient network, rate-limit, and server failures.
+- Normalize numeric and boolean payloads strictly.
+- Replace site-specific schedule examples with neutral documentation.
+
 ### Fixed
 
-- Accept the live SEC Smart `/devices` response field `deviceid` in addition to the documented `id` field.
-- Interpret SEC notification code `00` as no active error.
-- Mark an all-zero environmental telemetry block unavailable instead of reporting misleading zero measurements.
+- Accept the live `/devices` field `deviceid` in addition to documented `id`.
+- Interpret notification code `00` as no active error.
+- Mark an all-zero environmental telemetry block unavailable instead of reporting false zero measurements.
 
-### Removed
+## [0.1.0] - 2026-09-02
+
+- Initial SEC Smart cloud integration with Config Flow, discovery, telemetry, diagnostics, and opt-in fan control.

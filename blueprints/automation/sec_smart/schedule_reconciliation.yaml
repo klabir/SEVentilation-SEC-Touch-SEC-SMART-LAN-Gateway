@@ -1,0 +1,114 @@
+blueprint:
+  name: SEC Smart area schedule reconciliation
+  description: >-
+    Applies the active Home Assistant Schedule block to one SEC Smart ventilation
+    area, confirms the resulting mode, supports a persistent manual-override
+    switch, and retries missed transitions every five minutes.
+  domain: automation
+  source_url: https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/blob/main/blueprints/automation/sec_smart/schedule_reconciliation.yaml
+  input:
+    schedule_entity:
+      name: Schedule helper
+      selector:
+        entity:
+          domain: schedule
+    fan_entity:
+      name: SEC Smart area fan
+      selector:
+        entity:
+          integration: sec_smart
+          domain: fan
+    mode_sensor:
+      name: SEC Smart area mode sensor
+      selector:
+        entity:
+          integration: sec_smart
+          domain: sensor
+    override_entity:
+      name: Manual override switch
+      description: Optional. When on, Home Assistant leaves this area untouched.
+      default: ""
+      selector:
+        entity:
+          integration: sec_smart
+          domain: switch
+    failure_actions:
+      name: Confirmation failure actions
+      description: Optional actions, such as a persistent notification.
+      default: []
+      selector:
+        action: {}
+
+mode: queued
+max: 10
+max_exceeded: warning
+
+variables:
+  schedule_entity: !input schedule_entity
+  fan_entity: !input fan_entity
+  mode_sensor: !input mode_sensor
+  override_entity: !input override_entity
+
+triggers:
+  - trigger: schedule.block_started
+    target:
+      entity_id: !input schedule_entity
+  - trigger: homeassistant
+    event: start
+  - trigger: time_pattern
+    minutes: /5
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ is_state(schedule_entity, 'on')
+         and states(fan_entity) not in ['unavailable', 'unknown']
+         and (not override_entity or not is_state(override_entity, 'on')) }}
+
+actions:
+  - variables:
+      desired_mode: "{{ state_attr(schedule_entity, 'mode') | default('', true) | lower }}"
+      desired_level: "{{ state_attr(schedule_entity, 'level') | int(0) }}"
+      expected_mode: >-
+        {% if desired_mode == 'manual' %}Manual {{ desired_level }}
+        {% elif desired_mode == 'off' %}Fans off
+        {% elif desired_mode == 'boost' %}Boost ventilation
+        {% elif desired_mode == 'humidity' %}Humidity regulation
+        {% elif desired_mode == 'co2' %}CO2 regulation
+        {% elif desired_mode == 'schedule' %}Timed program
+        {% elif desired_mode == 'snooze' %}Snooze
+        {% else %}invalid{% endif %}
+  - condition: template
+    value_template: >-
+      {{ expected_mode != 'invalid'
+         and (desired_mode != 'manual' or 1 <= desired_level <= 6) }}
+  - if:
+      - condition: template
+        value_template: "{{ states(mode_sensor) != expected_mode }}"
+    then:
+      - choose:
+          - conditions: "{{ desired_mode == 'manual' }}"
+            sequence:
+              - action: fan.set_percentage
+                target:
+                  entity_id: !input fan_entity
+                data:
+                  percentage: "{{ [0, 16, 33, 50, 67, 83, 100][desired_level] }}"
+          - conditions: "{{ desired_mode == 'off' }}"
+            sequence:
+              - action: fan.turn_off
+                target:
+                  entity_id: !input fan_entity
+        default:
+          - action: fan.set_preset_mode
+            target:
+              entity_id: !input fan_entity
+            data:
+              preset_mode: "{{ desired_mode }}"
+      - wait_template: "{{ states(mode_sensor) == expected_mode }}"
+        timeout: "00:00:45"
+        continue_on_timeout: true
+      - if:
+          - condition: template
+            value_template: "{{ states(mode_sensor) != expected_mode }}"
+        then: !input failure_actions

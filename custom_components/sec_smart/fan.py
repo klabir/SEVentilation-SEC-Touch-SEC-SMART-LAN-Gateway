@@ -121,13 +121,8 @@ class SecSmartAreaFan(SecSmartEntity, FanEntity):
         await self._set_mode(MODE_OFF)
 
     async def _set_mode(self, mode: str) -> None:
-        await self.coordinator.api.async_set_area_mode(
-            self.coordinator.device_id,
+        await self.coordinator.async_set_area_mode(
             self._area_id,
+            self._area_key,
             mode,
         )
-        await self.coordinator.async_request_refresh()
-        if self._mode != mode:
-            raise HomeAssistantError(
-                f"SEC Smart did not confirm {mode!r} for area {self._area_id}"
-            )

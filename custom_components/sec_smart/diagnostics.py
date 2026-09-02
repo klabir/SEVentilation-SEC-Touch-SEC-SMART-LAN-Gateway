@@ -11,7 +11,19 @@ from .coordinator import SecSmartCoordinator
 
 TO_REDACT = {
     "id",
+    "deviceid",
+    "name",
+    "label",
     "token",
+    "timers",
+    "serial",
+    "serialNumber",
+    "mac",
+    "macAddress",
+    "ip",
+    "ipAddress",
+    "actualMessage",
+    "lastMessage",
     "articleCode",
     "articleCodeTouchPanel1",
     "articleCodeTouchPanel2",
@@ -29,7 +41,15 @@ async def async_get_config_entry_diagnostics(
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
         "options": dict(entry.options),
         "devices": [
-            async_redact_data(coordinator.data, TO_REDACT)
+            async_redact_data(
+                {
+                    "data": coordinator.data,
+                    "endpoint_health": coordinator.endpoint_health,
+                    "last_successful_update": coordinator.last_successful_update,
+                    "last_commands": coordinator.area_commands,
+                },
+                TO_REDACT,
+            )
             for coordinator in entry.runtime_data.values()
         ],
     }

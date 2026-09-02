@@ -12,7 +12,10 @@ sys.modules[SPEC.name] = UTIL_MODULE
 SPEC.loader.exec_module(UTIL_MODULE)
 
 active_error = UTIL_MODULE.active_error
+boolean_value = UTIL_MODULE.boolean_value
+numeric_value = UTIL_MODULE.numeric_value
 telemetry_value = UTIL_MODULE.telemetry_value
+vendor_timers_active = UTIL_MODULE.vendor_timers_active
 
 
 def test_all_zero_environment_is_unavailable() -> None:
@@ -41,3 +44,24 @@ def test_real_notification_is_an_error() -> None:
 
 def test_missing_notifications_are_unknown() -> None:
     assert active_error({"notifications": None}) is None
+
+
+def test_numeric_values_are_strictly_normalized() -> None:
+    assert numeric_value("21.4") == 21.4
+    assert numeric_value("42", integer=True) == 42
+    assert numeric_value(True) is None
+    assert numeric_value("not-a-number") is None
+
+
+def test_boolean_values_do_not_treat_false_text_as_true() -> None:
+    assert boolean_value("true") is True
+    assert boolean_value("false") is False
+    assert boolean_value(1) is True
+    assert boolean_value(0) is False
+    assert boolean_value(2) is None
+
+
+def test_vendor_timer_ownership() -> None:
+    assert vendor_timers_active({"timers": {"timer1": {"active": "true"}}}) is True
+    assert vendor_timers_active({"timers": {"timer1": {"active": False}}}) is False
+    assert vendor_timers_active({}) is None
