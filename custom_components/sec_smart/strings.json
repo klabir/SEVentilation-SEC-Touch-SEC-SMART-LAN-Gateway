@@ -1,0 +1,40 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This SEC Smart account is already configured."
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to SEC Smart or no devices were found.",
+      "invalid_auth": "The API token is invalid."
+    },
+    "step": {
+      "user": {
+        "data": {
+          "base_url": "API base URL",
+          "token": "API token"
+        },
+        "description": "Connect to your SEC Smart account. The token is stored in Home Assistant's config entry.",
+        "title": "SEC Smart Ventilation"
+      },
+      "reauth_confirm": {
+        "data": {
+          "token": "New API token"
+        },
+        "description": "Enter a new SEC Smart API token.",
+        "title": "Reauthenticate SEC Smart"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "allow_control": "Allow ventilation control",
+          "poll_interval": "Polling interval in seconds"
+        },
+        "description": "Control is disabled by default. Enable it only after read-only values have been verified.",
+        "title": "SEC Smart options"
+      }
+    }
+  }
+}

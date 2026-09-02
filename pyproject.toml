@@ -1,0 +1,15 @@
+[project]
+name = "ha-sec-smart"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = ["aiohttp>=3.11"]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

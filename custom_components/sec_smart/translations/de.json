@@ -1,0 +1,40 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Dieses SEC-Smart-Konto ist bereits konfiguriert."
+    },
+    "error": {
+      "cannot_connect": "SEC Smart ist nicht erreichbar oder es wurden keine Geräte gefunden.",
+      "invalid_auth": "Der API-Token ist ungültig."
+    },
+    "step": {
+      "user": {
+        "data": {
+          "base_url": "API-Basis-URL",
+          "token": "API-Token"
+        },
+        "description": "Mit dem SEC-Smart-Konto verbinden.",
+        "title": "SEC Smart Lüftung"
+      },
+      "reauth_confirm": {
+        "data": {
+          "token": "Neuer API-Token"
+        },
+        "description": "Einen neuen SEC-Smart-API-Token eingeben.",
+        "title": "SEC Smart neu authentifizieren"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "allow_control": "Lüftungssteuerung erlauben",
+          "poll_interval": "Abfrageintervall in Sekunden"
+        },
+        "description": "Die Steuerung ist standardmäßig deaktiviert. Erst nach Prüfung der Messwerte aktivieren.",
+        "title": "SEC-Smart-Optionen"
+      }
+    }
+  }
+}
