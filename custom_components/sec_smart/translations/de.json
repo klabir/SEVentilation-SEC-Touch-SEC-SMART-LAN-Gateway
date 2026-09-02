@@ -30,9 +30,10 @@
       "init": {
         "data": {
           "allow_control": "Lüftungssteuerung erlauben",
+          "allow_settings": "Steuerung der Systemeinstellungen erlauben",
           "poll_interval": "Abfrageintervall in Sekunden"
         },
-        "description": "Die Steuerung ist standardmäßig deaktiviert. Erst nach Prüfung der Messwerte aktivieren.",
+        "description": "Steuerung und Systemeinstellungen sind standardmäßig deaktiviert. Das Zurücksetzen der Filterlaufzeit bleibt zusätzlich in der Entitätsregistrierung deaktiviert.",
         "title": "SEC-Smart-Optionen"
       }
     }

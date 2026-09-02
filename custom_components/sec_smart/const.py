@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Final
 
 DOMAIN: Final = "sec_smart"
-PLATFORMS: Final = ["sensor", "binary_sensor"]
 
 CONF_BASE_URL: Final = "base_url"
 CONF_DEVICES: Final = "devices"
 CONF_ALLOW_CONTROL: Final = "allow_control"
+CONF_ALLOW_SETTINGS: Final = "allow_settings"
 CONF_POLL_INTERVAL: Final = "poll_interval"
 
 DEFAULT_BASE_URL: Final = "https://api.sec-smart.app/v1"

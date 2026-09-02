@@ -30,9 +30,10 @@
       "init": {
         "data": {
           "allow_control": "Allow ventilation control",
+          "allow_settings": "Allow system settings control",
           "poll_interval": "Polling interval in seconds"
         },
-        "description": "Control is disabled by default. Enable it only after read-only values have been verified.",
+        "description": "Control and system settings are disabled by default. Filter reset remains disabled in the entity registry until explicitly enabled.",
         "title": "SEC Smart options"
       }
     }

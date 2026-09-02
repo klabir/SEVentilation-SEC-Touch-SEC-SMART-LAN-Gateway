@@ -12,6 +12,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import SecSmartApi, SecSmartAuthError, SecSmartError
 from .const import (
     CONF_ALLOW_CONTROL,
+    CONF_ALLOW_SETTINGS,
     CONF_BASE_URL,
     CONF_DEVICES,
     CONF_POLL_INTERVAL,
@@ -133,6 +134,10 @@ class SecSmartOptionsFlow(OptionsFlow):
                     vol.Required(
                         CONF_ALLOW_CONTROL,
                         default=self.config_entry.options.get(CONF_ALLOW_CONTROL, False),
+                    ): bool,
+                    vol.Required(
+                        CONF_ALLOW_SETTINGS,
+                        default=self.config_entry.options.get(CONF_ALLOW_SETTINGS, False),
                     ): bool,
                 }
             ),

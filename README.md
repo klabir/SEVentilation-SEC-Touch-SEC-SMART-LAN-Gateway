@@ -2,19 +2,25 @@
 
 Cloud-polling Home Assistant integration for SEVentilation systems connected through a SEC-Touch and SEC-SMART LAN Gateway.
 
-## Status
+> [!IMPORTANT]
+> The SEC cloud API is the transport and may change without notice. The physical SEC-Touch and vendor app remain the authoritative fallback. Factory reset, hardware assignment, and low-level commissioning endpoints are intentionally excluded.
 
-Version 0.1.0 is a staged beta. It provides:
+## Features
 
-- UI configuration with masked bearer-token entry
-- automatic discovery of SEC Smart devices
-- area mode, CO2, humidity, indoor/outdoor temperature, filter life and uptime sensors
-- filter and active-error binary sensors
-- gateway/controller metadata in the Home Assistant device registry
-- optional area control, disabled by default
-- reauthentication on expired credentials
-
-The SEC cloud API is the transport. The physical SEC-Touch and vendor app remain the fallback.
+- Home Assistant Config Flow with masked API-token entry and reauthentication
+- automatic SEC Smart device and area discovery
+- CO2, humidity, indoor/outdoor temperature, filter life, uptime, and per-area Snooze sensors
+- area mode and last-command confirmation sensors
+- cloud/API health with per-endpoint diagnostics
+- filter and active-error problem sensors
+- vendor-timer ownership sensor per area
+- gateway/controller firmware and hardware metadata
+- optional area control with six manual levels and SEC operating modes
+- persistent per-area **Schedule override** switches
+- optional settings controls for thresholds, Snooze duration, summer mode, and filter lifetime
+- disabled-by-default filter-life reset button
+- Blueprint-based Home Assistant scheduling beyond the five vendor timer slots
+- serialized writes, transient-error retries, rate-limit handling, and command read-back
 
 ## Installation
 
@@ -25,80 +31,23 @@ The SEC cloud API is the transport. The physical SEC-Touch and vendor app remain
 3. Add this repository as an **Integration**.
 4. Install **SEC Smart Ventilation** and restart Home Assistant once.
 
-For a manual installation, copy `custom_components/sec_smart` into Home Assistant's `/config/custom_components/` and restart Home Assistant once.
+For a manual installation, copy `custom_components/sec_smart` to `/config/custom_components/` and restart Home Assistant once.
 
-After installation, add **SEC Smart Ventilation** under **Settings > Devices & services**.
+Then add **SEC Smart Ventilation** under **Settings > Devices & services**. Enter the API token only in Home Assistant's masked configuration form; never put it in YAML, source code, URLs, or logs.
 
-Enter the API token only in Home Assistant's masked configuration form. Do not put it in YAML, source code or logs.
+## Integration options
 
-## Enabling control
+The initial setup is read-only. Open the integration's **Configure** dialog to opt in to:
 
-The initial setup is read-only. After verifying sensor values, open the integration's **Configure** dialog and enable **Allow ventilation control**. This creates one `fan` entity for each active area. Commands are read back after every write.
+- **Allow ventilation control**: creates one `fan` and one local Schedule-override switch per active area.
+- **Allow system settings control**: exposes CO2/humidity thresholds, Snooze duration, summer mode, and filter maximum runtime.
+- **Polling interval**: 30–600 seconds; 60 seconds is recommended.
 
-Exposed modes:
+The filter reset button remains disabled in the entity registry until explicitly enabled. Enabling settings does not change any value by itself.
 
-- Off
-- Manual levels 1-6
-- Boost ventilation
-- Humidity regulation
-- CO2 regulation
-- Timed program
-- Snooze
+### Area control
 
-Factory reset, hardware assignment and low-level I/O setup are intentionally not implemented.
-
-## Home Assistant scheduler
-
-The SEC app provides only five timer slots per area. Home Assistant's native Schedule helper can replace that limit with as many weekly blocks as the Home Assistant schedule supports.
-
-The recommended design is:
-
-- one native Schedule helper per ventilation area
-- the requested SEC mode and manual level stored as block **Additional data**
-- one queued automation that applies block changes
-- a startup and five-minute reconciliation trigger for outage recovery
-- the SEC app and SEC-Touch retained as fallbacks
-
-### 1. Prepare the SEC app
-
-For each area:
-
-1. Disable all five `Schaltzeit`/timer switches. The original times and modes can remain stored for rollback.
-2. Select **Manual** mode.
-3. Select an initial manual level that matches the currently active Home Assistant block.
-
-Do not leave the area in **Timed program** mode while Home Assistant owns the schedule. Humidity, CO2, Boost and Snooze modes should only be selected when a Home Assistant schedule block or a deliberate manual override requires them.
-
-### 2. Create Schedule helpers
-
-Open **Settings > Devices & services > Helpers**, create one **Schedule** helper per area and cover the entire day with touching blocks. Gaps leave the previously applied SEC mode active because no new block is selected.
-
-Open each block and add one of these mappings under **Additional data**:
-
-```yaml
-mode: manual
-level: 2
-```
-
-For manual operation, `level` must be an integer from 1 through 6. Other supported mappings do not need `level`:
-
-```yaml
-mode: off
-```
-
-Supported `mode` values are:
-
-| Value | SEC operating mode |
-| --- | --- |
-| `manual` | Manual level 1-6 |
-| `off` | Fans off |
-| `boost` | Boost ventilation |
-| `humidity` | Humidity regulation |
-| `co2` | CO2 regulation |
-| `snooze` | Snooze |
-| `schedule` | SEC timed program; normally avoid when HA owns scheduling |
-
-Manual levels map to Home Assistant fan percentages as follows:
+The `fan` entities expose Off, manual levels 1–6, Boost, humidity regulation, CO2 regulation, Timed program, and Snooze.
 
 | SEC level | HA percentage |
 | ---: | ---: |
@@ -109,118 +58,98 @@ Manual levels map to Home Assistant fan percentages as follows:
 | 5 | 83% |
 | 6 | 100% |
 
-Example weekly blocks currently used for two areas:
+Every cloud write is serialized per area and confirmed by reading the resulting SEC state.
 
-**Office**
+## Scheduling beyond five vendor timers
 
-| Time | Additional data |
-| --- | --- |
-| 00:00-05:00 | `mode: manual`, `level: 2` |
-| 05:00-05:30 | `mode: manual`, `level: 6` |
-| 05:30-13:15 | `mode: manual`, `level: 2` |
-| 13:15-13:30 | `mode: manual`, `level: 6` |
-| 13:30-24:00 | `mode: manual`, `level: 2` |
+Use one native Home Assistant **Schedule helper** and one Blueprint automation per area. Home Assistant becomes the schedule owner, while SEC-Touch and the vendor app remain available for deliberate manual overrides.
 
-**Bedroom**
+### 1. Prepare the vendor app
 
-| Time | Additional data |
-| --- | --- |
-| 00:00-01:00 | `mode: manual`, `level: 1` |
-| 01:00-07:40 | `mode: manual`, `level: 2` |
-| 07:40-09:00 | `mode: manual`, `level: 6` |
-| 09:00-22:00 | `mode: manual`, `level: 2` |
-| 22:00-24:00 | `mode: manual`, `level: 1` |
+For each HA-managed area:
 
-Apply the blocks to every required weekday.
+1. Disable all five `Schaltzeit` switches. Leave the stored times intact for rollback.
+2. Select **Manual** mode.
+3. Select the level that should remain active until the first HA reconciliation.
 
-### 3. Add the reconciliation automation
+Do not leave **Timed program** selected while Home Assistant owns the schedule. The integration's **vendor timers active** sensor identifies ownership conflicts.
 
-Replace the example schedule, fan and mode-sensor entity IDs with the entities from your Home Assistant instance. Add or remove entries under `for_each` for additional areas.
+### 2. Create a Schedule helper
+
+Open **Settings > Devices & services > Helpers**, create a Schedule helper, and cover the complete day with touching blocks. A gap deliberately leaves the previously applied mode active.
+
+Each block uses **Additional data**. For a manual block:
 
 ```yaml
-alias: SEC Smart schedule reconciliation
-description: Applies the active HA Schedule block to each SEC Smart area and confirms the resulting mode.
-triggers:
-  - trigger: schedule.block_started
-    target:
-      entity_id:
-        - schedule.seventilation_office
-        - schedule.seventilation_bedroom
-  - trigger: homeassistant
-    event: start
-  - trigger: time_pattern
-    minutes: /5
-conditions: []
-actions:
-  - repeat:
-      for_each:
-        - schedule: schedule.seventilation_office
-          fan: fan.sec_smart_office
-          mode_sensor: sensor.sec_smart_office_mode
-        - schedule: schedule.seventilation_bedroom
-          fan: fan.sec_smart_bedroom
-          mode_sensor: sensor.sec_smart_bedroom_mode
-      sequence:
-        - variables:
-            desired_mode: "{{ state_attr(repeat.item.schedule, 'mode') | default('', true) }}"
-            desired_level: "{{ state_attr(repeat.item.schedule, 'level') | int(0) }}"
-            expected_mode: >-
-              {% if desired_mode == 'manual' %}Manual {{ desired_level }}
-              {% elif desired_mode == 'off' %}Fans off
-              {% elif desired_mode == 'boost' %}Boost ventilation
-              {% elif desired_mode == 'humidity' %}Humidity regulation
-              {% elif desired_mode == 'co2' %}CO2 regulation
-              {% elif desired_mode == 'schedule' %}Timed program
-              {% elif desired_mode == 'snooze' %}Snooze
-              {% else %}invalid{% endif %}
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state(repeat.item.schedule, 'on')
-                   and states(repeat.item.fan) not in ['unavailable', 'unknown']
-                   and expected_mode != 'invalid'
-                   and states(repeat.item.mode_sensor) != expected_mode }}
-          then:
-            - choose:
-                - conditions: "{{ desired_mode == 'manual' and 1 <= desired_level <= 6 }}"
-                  sequence:
-                    - action: fan.set_percentage
-                      target:
-                        entity_id: "{{ repeat.item.fan }}"
-                      data:
-                        percentage: "{{ [0, 16, 33, 50, 67, 83, 100][desired_level] }}"
-                - conditions: "{{ desired_mode == 'off' }}"
-                  sequence:
-                    - action: fan.turn_off
-                      target:
-                        entity_id: "{{ repeat.item.fan }}"
-              default:
-                - action: fan.set_preset_mode
-                  target:
-                    entity_id: "{{ repeat.item.fan }}"
-                  data:
-                    preset_mode: "{{ desired_mode }}"
-            - wait_template: "{{ states(repeat.item.mode_sensor) == expected_mode }}"
-              timeout: "00:00:45"
-              continue_on_timeout: true
-mode: queued
-max: 10
-max_exceeded: warning
+mode: manual
+level: 2
 ```
 
-The automation suppresses duplicate commands, confirms changes through the area mode sensor, runs at every block boundary, recovers after Home Assistant restarts and reconciles missed changes every five minutes.
+Other valid modes omit `level`:
+
+```yaml
+mode: humidity
+```
+
+Supported `mode` values: `manual`, `off`, `boost`, `humidity`, `co2`, `snooze`, and `schedule`. Normally avoid `schedule` when HA owns scheduling.
+
+Neutral example:
+
+| Time | Additional data |
+| --- | --- |
+| 00:00–06:00 | `mode: manual`, `level: 1` |
+| 06:00–08:00 | `mode: manual`, `level: 3` |
+| 08:00–18:00 | `mode: co2` |
+| 18:00–24:00 | `mode: manual`, `level: 2` |
+
+### 3. Import and configure the Blueprint
+
+Blueprint source:
+
+```text
+https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/blob/main/blueprints/automation/sec_smart/schedule_reconciliation.yaml
+```
+
+Import it under **Settings > Automations & scenes > Blueprints**, then create one automation per area and select the Schedule helper, SEC Smart fan, area mode sensor, Schedule-override switch, and optional failure actions.
+
+The automation applies every block boundary, reconciles every five minutes, recovers after HA restarts, suppresses duplicate commands, and verifies the result.
 
 ### Manual override
 
-Changes made in the SEC app or through the fan entity are restored to the active Schedule block within five minutes. For a longer manual override, disable **SEC Smart schedule reconciliation** first, make the manual change, and re-enable the automation when Home Assistant should resume ownership.
+Turn on an area's **Schedule override** switch before changing that area in the vendor app, SEC-Touch, or HA fan entity. The Blueprint leaves it untouched until the switch is turned off. The switch is local to HA and persists across restarts.
 
 ### Scheduler rollback
 
-1. Disable **SEC Smart schedule reconciliation**.
-2. Re-enable the required five timer switches in the SEC app.
-3. Select **Timed program** in the SEC app if the vendor timers should resume control.
-4. Remove the Home Assistant Schedule helpers only after vendor control is confirmed.
+1. Disable the Blueprint automation.
+2. Re-enable the required vendor timer switches.
+3. Select **Timed program** if vendor timers should resume control.
+4. Remove HA Schedule helpers only after vendor control is confirmed.
+
+## Reliability model
+
+- Areas and telemetry use the configured fast polling interval.
+- Notifications refresh every five minutes.
+- Gateway, controller, and settings metadata refresh hourly.
+- HTTP 429/502/503/504 and transient network failures receive bounded retries.
+- Authentication failure starts Home Assistant's reauthentication flow.
+- Optional endpoint failures do not discard otherwise valid area state.
+- Diagnostics redact identifiers, labels, schedules, addresses, messages, and credentials.
+
+Automations should check the cloud-connection sensor, avoid decisions from unavailable telemetry, and use the Schedule override switch for human ownership.
+
+## Development
+
+```bash
+python -m compileall -q custom_components tests
+pytest -q
+```
+
+CI validates Python, JSON, YAML, tests, and HACS structure.
 
 ## Rollback
 
-Disable related automations, remove the config entry, delete `/config/custom_components/sec_smart`, and restart Home Assistant. The SEC-Touch and SEC app continue to operate independently.
+Disable related automations, remove the config entry, delete `/config/custom_components/sec_smart`, and restart Home Assistant once. The SEC-Touch and vendor app continue to operate independently.
+
+## License
+
+[MIT](LICENSE)
