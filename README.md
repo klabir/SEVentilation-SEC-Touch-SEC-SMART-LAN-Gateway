@@ -70,6 +70,11 @@ applies it to the selected ventilation area. This removes the SEC app's limit of
 five timer slots because a Home Assistant Schedule helper can contain as many
 blocks as required and can use a different plan for every weekday.
 
+The canonical profile for this Blueprint is **Example B — morning purge and
+reduced night operation**. Its five blocks are listed below and are also shown in
+the Blueprint description in Home Assistant. The reconciliation engine remains
+generic, so users can add or change blocks after the canonical profile works.
+
 ### 1. Prepare the vendor app
 
 For each HA-managed area:
@@ -115,23 +120,10 @@ unknown mode is rejected by the Blueprint without sending a device command.
 Normally avoid `mode: schedule` when Home Assistant owns scheduling because it
 hands control back to the vendor timer slots.
 
-#### Complete schedule examples
+#### Canonical Blueprint schedule: Example B
 
-The following examples cover every minute of the day. Configure the same blocks
-on Monday through Sunday for an identical daily plan, or edit individual days as
-needed.
-
-Example A — two short purge periods:
-
-| Time | Mode | Level |
-| --- | --- | ---: |
-| 00:00–05:00 | `manual` | 2 |
-| 05:00–05:30 | `manual` | 6 |
-| 05:30–13:15 | `manual` | 2 |
-| 13:15–13:30 | `manual` | 6 |
-| 13:30–24:00 | `manual` | 2 |
-
-Example B — morning purge and reduced night operation:
+Configure these blocks on Monday through Sunday. They cover every minute of the
+day without gaps or overlaps.
 
 | Time | Mode | Level |
 | --- | --- | ---: |
@@ -141,14 +133,10 @@ Example B — morning purge and reduced night operation:
 | 09:00–22:00 | `manual` | 2 |
 | 22:00–24:00 | `manual` | 1 |
 
-An adaptive example can mix regulated and manual modes:
-
-| Time | Additional data |
-| --- | --- |
-| 00:00–06:00 | `mode: manual`, `level: 1` |
-| 06:00–08:00 | `mode: manual`, `level: 3` |
-| 08:00–18:00 | `mode: co2` |
-| 18:00–24:00 | `mode: manual`, `level: 2` |
+For each block, enter `mode: manual` and the listed `level` as Additional data.
+After Example B is working, the helper can be extended with more blocks or with
+the other supported modes. The Blueprint logic does not impose a five-block
+limit.
 
 ### 3. Import and configure the Blueprint
 
@@ -164,7 +152,7 @@ Configure these inputs with entities from the same SEC area:
 
 | Blueprint input | Required | Configuration |
 | --- | --- | --- |
-| **Schedule helper** | Yes | The `schedule` entity containing this area's blocks and Additional data |
+| **Schedule helper** | Yes | The `schedule` entity containing the canonical Example B blocks, or a customized version, with Additional data |
 | **SEC Smart area fan** | Yes | The `fan` entity that receives mode and level commands |
 | **SEC Smart area mode sensor** | Yes | The mode sensor used to suppress duplicate writes and confirm the result |
 | **Manual override switch** | No | The area's Schedule override switch; when on, the Blueprint sends no commands |

@@ -1,14 +1,22 @@
 blueprint:
-  name: SEC Smart area schedule reconciliation
+  name: SEC Smart area schedule reconciliation (Example B profile)
   description: >-
     Applies the active Home Assistant Schedule block to one SEC Smart ventilation
     area, confirms the resulting mode, supports a persistent manual-override
-    switch, and retries missed transitions every five minutes.
+    switch, and retries missed transitions every five minutes. The canonical
+    Example B profile is Manual 1 from 00:00-01:00, Manual 2 from 01:00-07:40,
+    Manual 6 from 07:40-09:00, Manual 2 from 09:00-22:00, and Manual 1 from
+    22:00-24:00 on every day of the week. Configure these blocks in the selected
+    Schedule helper; the reconciliation engine also accepts customized blocks.
   domain: automation
   source_url: https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/blob/main/blueprints/automation/sec_smart/schedule_reconciliation.yaml
   input:
     schedule_entity:
       name: Schedule helper
+      description: >-
+        Select the area's Home Assistant Schedule helper. For the canonical
+        Example B profile, configure the five daily blocks listed in the
+        Blueprint description, each with mode: manual and its stated level.
       selector:
         entity:
           domain: schedule

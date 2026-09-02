@@ -5,8 +5,10 @@
 ### Changed
 
 - Document the Schedule-reconciliation Blueprint's triggers, conditions,
-  supported block data, complete schedules, inputs, confirmation behavior, and
+  supported block data, canonical schedule, inputs, confirmation behavior, and
   manual-override semantics.
+- Make Example B (morning purge and reduced night operation) the canonical
+  Blueprint schedule profile in the Blueprint UI and README.
 
 ## [0.3.0] - 2026-09-02
 
