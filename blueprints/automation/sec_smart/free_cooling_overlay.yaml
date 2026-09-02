@@ -1,0 +1,295 @@
+blueprint:
+  name: SEC Smart free-cooling schedule overlay
+  description: >-
+    Temporarily raises one SEC Smart area to a manual ventilation level when the
+    indoor temperature is high and outdoor air is sufficiently cooler. Uses a
+    dedicated Input Boolean as a persistent hysteresis latch, respects the area's
+    Schedule override switch, enforces a minimum dwell time, restores the active
+    Schedule-helper block, suppresses duplicate writes, and confirms the result.
+    Use this instead of the basic Schedule-reconciliation Blueprint for the area,
+    and use only one adaptive overlay Blueprint per area.
+  domain: automation
+  source_url: https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/blob/main/blueprints/automation/sec_smart/free_cooling_overlay.yaml
+  input:
+    schedule_entity:
+      name: Schedule helper
+      description: >-
+        The area's complete-day Schedule helper. Its active block is restored
+        when free cooling ends.
+      selector:
+        entity:
+          domain: schedule
+    fan_entity:
+      name: SEC Smart area fan
+      selector:
+        entity:
+          integration: sec_smart
+          domain: fan
+    mode_sensor:
+      name: SEC Smart area mode sensor
+      description: Used for duplicate suppression and command confirmation.
+      selector:
+        entity:
+          integration: sec_smart
+          domain: sensor
+    override_entity:
+      name: Manual Schedule override switch
+      description: >-
+        Optional. When on, this Blueprint leaves the area and its adaptive latch
+        untouched for manual, SEC app, or SEC-Touch control.
+      default: ""
+      selector:
+        entity:
+          integration: sec_smart
+          domain: switch
+    connection_sensor:
+      name: SEC Smart cloud connection sensor
+      description: Optional. Commands are blocked unless this sensor is on.
+      default: ""
+      selector:
+        entity:
+          integration: sec_smart
+          domain: binary_sensor
+    adaptive_state:
+      name: Free-cooling state helper
+      description: >-
+        A dedicated Input Boolean used internally as the persistent hysteresis
+        latch. Create one helper per area and do not share or toggle it manually.
+      selector:
+        entity:
+          domain: input_boolean
+    indoor_temperature_sensor:
+      name: Indoor temperature sensor
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    outdoor_temperature_sensor:
+      name: Outdoor temperature sensor
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    start_indoor_temperature:
+      name: Start above indoor temperature
+      description: Indoor temperature must be at least this high to start.
+      default: 24
+      selector:
+        number:
+          min: 15
+          max: 35
+          step: 0.5
+          unit_of_measurement: °C
+          mode: box
+    stop_indoor_temperature:
+      name: Stop below indoor temperature
+      description: Must be lower than the start temperature to provide hysteresis.
+      default: 22.5
+      selector:
+        number:
+          min: 10
+          max: 35
+          step: 0.5
+          unit_of_measurement: °C
+          mode: box
+    start_temperature_difference:
+      name: Start indoor/outdoor difference
+      description: Start only when indoor air is at least this much warmer.
+      default: 2
+      selector:
+        number:
+          min: 0.5
+          max: 15
+          step: 0.5
+          unit_of_measurement: °C
+          mode: box
+    stop_temperature_difference:
+      name: Stop indoor/outdoor difference
+      description: Must be lower than the start difference to provide hysteresis.
+      default: 1
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 0.5
+          unit_of_measurement: °C
+          mode: box
+    active_level:
+      name: Free-cooling manual level
+      default: 4
+      selector:
+        number:
+          min: 1
+          max: 6
+          step: 1
+          mode: slider
+    minimum_dwell_minutes:
+      name: Minimum active/inactive dwell time
+      description: >-
+        Prevents rapid switching after the adaptive state changes. Set to zero
+        only for testing.
+      default: 15
+      selector:
+        number:
+          min: 0
+          max: 180
+          step: 1
+          unit_of_measurement: min
+          mode: box
+    failure_actions:
+      name: Confirmation failure actions
+      description: Optional actions to run when a command is not confirmed.
+      default: []
+      selector:
+        action: {}
+
+mode: queued
+max: 10
+max_exceeded: warning
+
+variables:
+  schedule_entity: !input schedule_entity
+  fan_entity: !input fan_entity
+  mode_sensor: !input mode_sensor
+  override_entity: !input override_entity
+  connection_sensor: !input connection_sensor
+  adaptive_state: !input adaptive_state
+  indoor_temperature_sensor: !input indoor_temperature_sensor
+  outdoor_temperature_sensor: !input outdoor_temperature_sensor
+  start_indoor_temperature: !input start_indoor_temperature
+  stop_indoor_temperature: !input stop_indoor_temperature
+  start_temperature_difference: !input start_temperature_difference
+  stop_temperature_difference: !input stop_temperature_difference
+  active_level: !input active_level
+  minimum_dwell_minutes: !input minimum_dwell_minutes
+  sensors_valid: >-
+    {{ is_number(states(indoor_temperature_sensor))
+       and is_number(states(outdoor_temperature_sensor))
+       and -50 <= states(indoor_temperature_sensor) | float <= 60
+       and -50 <= states(outdoor_temperature_sensor) | float <= 60 }}
+  thresholds_valid: >-
+    {{ stop_indoor_temperature < start_indoor_temperature
+       and stop_temperature_difference < start_temperature_difference }}
+  start_requested: >-
+    {% if is_number(states(indoor_temperature_sensor))
+          and is_number(states(outdoor_temperature_sensor)) %}
+      {% set indoor = states(indoor_temperature_sensor) | float %}
+      {% set outdoor = states(outdoor_temperature_sensor) | float %}
+      {{ indoor >= start_indoor_temperature
+         and indoor - outdoor >= start_temperature_difference }}
+    {% else %}
+      false
+    {% endif %}
+  stop_requested: >-
+    {% if is_number(states(indoor_temperature_sensor))
+          and is_number(states(outdoor_temperature_sensor)) %}
+      {% set indoor = states(indoor_temperature_sensor) | float %}
+      {% set outdoor = states(outdoor_temperature_sensor) | float %}
+      {{ indoor <= stop_indoor_temperature
+         or indoor - outdoor <= stop_temperature_difference }}
+    {% else %}
+      false
+    {% endif %}
+  dwell_elapsed: >-
+    {{ as_timestamp(now())
+       - as_timestamp(states[adaptive_state].last_changed)
+       >= minimum_dwell_minutes * 60 }}
+  target_source: >-
+    {% if is_state(adaptive_state, 'on') %}
+      {{ 'schedule' if stop_requested and dwell_elapsed else 'adaptive' }}
+    {% else %}
+      {{ 'adaptive' if start_requested and dwell_elapsed else 'schedule' }}
+    {% endif %}
+
+triggers:
+  - trigger: state
+    entity_id: !input indoor_temperature_sensor
+  - trigger: state
+    entity_id: !input outdoor_temperature_sensor
+  - trigger: state
+    entity_id: !input adaptive_state
+  - trigger: schedule.block_started
+    target:
+      entity_id: !input schedule_entity
+  - trigger: homeassistant
+    event: start
+  - trigger: time_pattern
+    minutes: /5
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ sensors_valid
+         and thresholds_valid
+         and states(adaptive_state) in ['on', 'off']
+         and states(fan_entity) not in ['unavailable', 'unknown']
+         and (not connection_sensor or is_state(connection_sensor, 'on'))
+         and (not override_entity or not is_state(override_entity, 'on')) }}
+
+actions:
+  - if:
+      - condition: template
+        value_template: >-
+          {{ target_source == 'adaptive' and is_state(adaptive_state, 'off') }}
+    then:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: !input adaptive_state
+  - if:
+      - condition: template
+        value_template: >-
+          {{ target_source == 'schedule' and is_state(adaptive_state, 'on') }}
+    then:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: !input adaptive_state
+  - variables:
+      desired_mode: >-
+        {{ 'manual' if target_source == 'adaptive'
+           else state_attr(schedule_entity, 'mode') | default('', true) | lower }}
+      desired_level: >-
+        {{ active_level if target_source == 'adaptive'
+           else state_attr(schedule_entity, 'level') | int(0) }}
+      expected_mode: >-
+        {% if desired_mode == 'manual' %}Manual {{ desired_level | int }}
+        {% elif desired_mode == 'off' %}Fans off
+        {% elif desired_mode == 'boost' %}Boost ventilation
+        {% elif desired_mode == 'humidity' %}Humidity regulation
+        {% elif desired_mode == 'co2' %}CO2 regulation
+        {% elif desired_mode == 'schedule' %}Timed program
+        {% elif desired_mode == 'snooze' %}Snooze
+        {% else %}invalid{% endif %}
+  - condition: template
+    value_template: >-
+      {{ expected_mode != 'invalid'
+         and (desired_mode != 'manual' or 1 <= desired_level | int <= 6) }}
+  - if:
+      - condition: template
+        value_template: "{{ states(mode_sensor) != expected_mode }}"
+    then:
+      - choose:
+          - conditions: "{{ desired_mode == 'manual' }}"
+            sequence:
+              - action: fan.set_percentage
+                target:
+                  entity_id: !input fan_entity
+                data:
+                  percentage: "{{ [0, 16, 33, 50, 67, 83, 100][desired_level | int] }}"
+          - conditions: "{{ desired_mode == 'off' }}"
+            sequence:
+              - action: fan.turn_off
+                target:
+                  entity_id: !input fan_entity
+        default:
+          - action: fan.set_preset_mode
+            target:
+              entity_id: !input fan_entity
+            data:
+              preset_mode: "{{ desired_mode }}"
+      - wait_template: "{{ states(mode_sensor) == expected_mode }}"
+        timeout: "00:00:45"
+        continue_on_timeout: true
+      - if:
+          - condition: template
+            value_template: "{{ states(mode_sensor) != expected_mode }}"
+        then: !input failure_actions

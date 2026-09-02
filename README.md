@@ -20,6 +20,7 @@ Cloud-polling Home Assistant integration for SEVentilation systems connected thr
 - optional settings controls for thresholds, Snooze duration, summer mode, and filter lifetime
 - disabled-by-default filter-life reset button
 - Blueprint-based Home Assistant scheduling beyond the five vendor timer slots
+- optional Free Cooling and absolute-humidity schedule-overlay Blueprints
 - serialized writes, transient-error retries, rate-limit handling, and command read-back
 
 ## Installation
@@ -218,6 +219,110 @@ Important boundary behavior:
 ### Manual override
 
 Turn on an area's **Schedule override** switch before changing that area in the vendor app, SEC-Touch, or HA fan entity. The Blueprint leaves it untouched until the switch is turned off. The switch is local to HA and persists across restarts. If the switch remains off, a manual change can be reverted by the next five-minute reconciliation.
+
+## Adaptive schedule overlays
+
+The repository includes two optional Blueprints inspired by useful automation
+ideas found in other community projects. They are independent implementations
+with stricter safety behavior: invalid sensors never become zero, start and stop
+thresholds are separated, rapid switching is blocked, cloud writes are
+deduplicated, and the resulting SEC mode is confirmed.
+
+An adaptive overlay contains the complete schedule-reconciliation logic. For a
+given area, use exactly one of these three choices:
+
+1. the basic Schedule-reconciliation Blueprint;
+2. the Free Cooling overlay; or
+3. the absolute-humidity overlay.
+
+Do not run two choices against the same area. Parallel automations would compete
+for control. Both overlays require a Schedule helper that covers the complete
+day, because the active Schedule block is the state restored when adaptive
+ventilation ends.
+
+For either overlay:
+
+1. Create a dedicated **Input Boolean** helper for each area. It is an internal,
+   persistent adaptive-state latch; do not share it or toggle it manually.
+2. Import the chosen Blueprint and create one automation for the area.
+3. Select the area's Schedule helper, SEC fan, mode sensor, Schedule-override
+   switch, and the SEC cloud-connection binary sensor.
+4. Select the required environmental sensors and review every threshold.
+5. Disable the area's basic Schedule-reconciliation automation before enabling
+   the overlay.
+
+The Schedule override switch always wins. While it is on, the overlay neither
+changes the fan nor modifies its adaptive-state latch. When it is turned off,
+the next sensor update, five-minute reconciliation, or block boundary resumes
+automatic control.
+
+### Free Cooling overlay
+
+Blueprint source:
+
+```text
+https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/blob/main/blueprints/automation/sec_smart/free_cooling_overlay.yaml
+```
+
+Free Cooling raises the area to a selected manual level only when the indoor
+temperature is high **and** outdoor air is sufficiently cooler. It is intended
+for warm-weather night or morning ventilation, not frost or humidity protection.
+
+| Input | Default | Meaning |
+| --- | ---: | --- |
+| Start indoor temperature | 24 °C | Indoor temperature must reach this value |
+| Stop indoor temperature | 22.5 °C | Stop when indoor temperature falls to this value |
+| Start indoor/outdoor difference | 2 °C | Indoor air must be at least this much warmer |
+| Stop indoor/outdoor difference | 1 °C | Stop when the useful temperature difference falls to this value |
+| Active manual level | 4 | SEC level used during Free Cooling |
+| Minimum active/inactive dwell | 15 min | Earliest allowed state change after the previous one |
+
+The stop values must be lower than the corresponding start values. This
+hysteresis prevents repeated switching around a single threshold.
+
+### Absolute-humidity overlay
+
+Blueprint source:
+
+```text
+https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/blob/main/blueprints/automation/sec_smart/absolute_humidity_overlay.yaml
+```
+
+This overlay uses indoor/outdoor temperature and relative humidity to calculate
+absolute humidity in g/m³. It raises ventilation only when indoor relative
+humidity is high and outdoor air actually contains less water. Comparing raw
+relative-humidity percentages would be misleading when indoor and outdoor
+temperatures differ.
+
+| Input | Default | Meaning |
+| --- | ---: | --- |
+| Start indoor relative humidity | 60% | Indoor humidity must reach this value |
+| Stop indoor relative humidity | 55% | Stop when indoor humidity falls to this value |
+| Start absolute-humidity difference | 1.5 g/m³ | Indoor air must contain at least this much more water |
+| Stop absolute-humidity difference | 0.5 g/m³ | Stop when drying benefit falls to this value |
+| Active manual level | 4 | SEC level used during humidity ventilation |
+| Minimum active/inactive dwell | 15 min | Earliest allowed state change after the previous one |
+
+The overlay starts only when both start conditions are true. It stops when
+either stop condition becomes true. The stop thresholds must be lower than the
+start thresholds.
+
+### Overlay safety behavior
+
+| Situation | Behavior |
+| --- | --- |
+| Any required sensor is unknown, unavailable, or non-numeric | Send no command and preserve the latch |
+| Schedule override is on | Leave the area and latch untouched |
+| Optional cloud-connection sensor is off | Send no command |
+| Desired mode is already active | Suppress the duplicate cloud write |
+| Command is sent | Wait up to 45 seconds for mode-sensor confirmation |
+| Confirmation fails | Run the optional failure actions |
+| Adaptive condition ends | Restore the currently active Schedule block |
+| Home Assistant restarts | Re-evaluate sensors, latch, and current Schedule block |
+
+The Blueprints do not replace frost, condensation, or building-protection logic
+provided by SEC hardware. Start with conservative thresholds and inspect
+automation traces before relying on unattended operation.
 
 ### Scheduler rollback
 

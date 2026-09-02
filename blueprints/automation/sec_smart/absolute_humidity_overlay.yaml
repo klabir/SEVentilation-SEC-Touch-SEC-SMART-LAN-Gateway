@@ -1,0 +1,334 @@
+blueprint:
+  name: SEC Smart absolute-humidity schedule overlay
+  description: >-
+    Temporarily raises one SEC Smart area to a manual ventilation level when
+    indoor humidity is high and outdoor air contains sufficiently less absolute
+    humidity. Uses indoor/outdoor temperature and relative humidity rather than
+    comparing relative humidity directly. A dedicated Input Boolean provides a
+    persistent hysteresis latch. The automation respects the area's Schedule
+    override switch, enforces a minimum dwell time, restores the active
+    Schedule-helper block, suppresses duplicate writes, and confirms the result.
+    Use this instead of the basic Schedule-reconciliation Blueprint for the area,
+    and use only one adaptive overlay Blueprint per area.
+  domain: automation
+  source_url: https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/blob/main/blueprints/automation/sec_smart/absolute_humidity_overlay.yaml
+  input:
+    schedule_entity:
+      name: Schedule helper
+      description: >-
+        The area's complete-day Schedule helper. Its active block is restored
+        when humidity ventilation ends.
+      selector:
+        entity:
+          domain: schedule
+    fan_entity:
+      name: SEC Smart area fan
+      selector:
+        entity:
+          integration: sec_smart
+          domain: fan
+    mode_sensor:
+      name: SEC Smart area mode sensor
+      description: Used for duplicate suppression and command confirmation.
+      selector:
+        entity:
+          integration: sec_smart
+          domain: sensor
+    override_entity:
+      name: Manual Schedule override switch
+      description: >-
+        Optional. When on, this Blueprint leaves the area and its adaptive latch
+        untouched for manual, SEC app, or SEC-Touch control.
+      default: ""
+      selector:
+        entity:
+          integration: sec_smart
+          domain: switch
+    connection_sensor:
+      name: SEC Smart cloud connection sensor
+      description: Optional. Commands are blocked unless this sensor is on.
+      default: ""
+      selector:
+        entity:
+          integration: sec_smart
+          domain: binary_sensor
+    adaptive_state:
+      name: Humidity-ventilation state helper
+      description: >-
+        A dedicated Input Boolean used internally as the persistent hysteresis
+        latch. Create one helper per area and do not share or toggle it manually.
+      selector:
+        entity:
+          domain: input_boolean
+    indoor_temperature_sensor:
+      name: Indoor temperature sensor
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    indoor_humidity_sensor:
+      name: Indoor relative-humidity sensor
+      selector:
+        entity:
+          domain: sensor
+          device_class: humidity
+    outdoor_temperature_sensor:
+      name: Outdoor temperature sensor
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    outdoor_humidity_sensor:
+      name: Outdoor relative-humidity sensor
+      selector:
+        entity:
+          domain: sensor
+          device_class: humidity
+    start_indoor_humidity:
+      name: Start above indoor relative humidity
+      description: Indoor relative humidity must be at least this high to start.
+      default: 60
+      selector:
+        number:
+          min: 20
+          max: 95
+          step: 1
+          unit_of_measurement: "%"
+          mode: box
+    stop_indoor_humidity:
+      name: Stop below indoor relative humidity
+      description: Must be lower than the start humidity to provide hysteresis.
+      default: 55
+      selector:
+        number:
+          min: 15
+          max: 90
+          step: 1
+          unit_of_measurement: "%"
+          mode: box
+    start_absolute_humidity_difference:
+      name: Start absolute-humidity difference
+      description: >-
+        Start only when indoor air contains at least this many more grams of
+        water per cubic metre than outdoor air.
+      default: 1.5
+      selector:
+        number:
+          min: 0.1
+          max: 10
+          step: 0.1
+          unit_of_measurement: g/m³
+          mode: box
+    stop_absolute_humidity_difference:
+      name: Stop absolute-humidity difference
+      description: Must be lower than the start difference to provide hysteresis.
+      default: 0.5
+      selector:
+        number:
+          min: 0
+          max: 9
+          step: 0.1
+          unit_of_measurement: g/m³
+          mode: box
+    active_level:
+      name: Humidity-ventilation manual level
+      default: 4
+      selector:
+        number:
+          min: 1
+          max: 6
+          step: 1
+          mode: slider
+    minimum_dwell_minutes:
+      name: Minimum active/inactive dwell time
+      description: >-
+        Prevents rapid switching after the adaptive state changes. Set to zero
+        only for testing.
+      default: 15
+      selector:
+        number:
+          min: 0
+          max: 180
+          step: 1
+          unit_of_measurement: min
+          mode: box
+    failure_actions:
+      name: Confirmation failure actions
+      description: Optional actions to run when a command is not confirmed.
+      default: []
+      selector:
+        action: {}
+
+mode: queued
+max: 10
+max_exceeded: warning
+
+variables:
+  schedule_entity: !input schedule_entity
+  fan_entity: !input fan_entity
+  mode_sensor: !input mode_sensor
+  override_entity: !input override_entity
+  connection_sensor: !input connection_sensor
+  adaptive_state: !input adaptive_state
+  indoor_temperature_sensor: !input indoor_temperature_sensor
+  indoor_humidity_sensor: !input indoor_humidity_sensor
+  outdoor_temperature_sensor: !input outdoor_temperature_sensor
+  outdoor_humidity_sensor: !input outdoor_humidity_sensor
+  start_indoor_humidity: !input start_indoor_humidity
+  stop_indoor_humidity: !input stop_indoor_humidity
+  start_absolute_humidity_difference: !input start_absolute_humidity_difference
+  stop_absolute_humidity_difference: !input stop_absolute_humidity_difference
+  active_level: !input active_level
+  minimum_dwell_minutes: !input minimum_dwell_minutes
+  sensors_valid: >-
+    {{ is_number(states(indoor_temperature_sensor))
+       and is_number(states(indoor_humidity_sensor))
+       and is_number(states(outdoor_temperature_sensor))
+       and is_number(states(outdoor_humidity_sensor))
+       and -50 <= states(indoor_temperature_sensor) | float <= 60
+       and -50 <= states(outdoor_temperature_sensor) | float <= 60
+       and 0 <= states(indoor_humidity_sensor) | float <= 100
+       and 0 <= states(outdoor_humidity_sensor) | float <= 100 }}
+  thresholds_valid: >-
+    {{ stop_indoor_humidity < start_indoor_humidity
+       and stop_absolute_humidity_difference
+           < start_absolute_humidity_difference }}
+  indoor_absolute_humidity: >-
+    {% if is_number(states(indoor_temperature_sensor))
+          and is_number(states(indoor_humidity_sensor)) %}
+      {% set temperature = states(indoor_temperature_sensor) | float %}
+      {% set humidity = states(indoor_humidity_sensor) | float %}
+      {% set saturation = 6.112 * e ** ((17.67 * temperature) / (temperature + 243.5)) %}
+      {{ 216.7 * saturation * humidity / 100 / (273.15 + temperature) }}
+    {% else %}
+      none
+    {% endif %}
+  outdoor_absolute_humidity: >-
+    {% if is_number(states(outdoor_temperature_sensor))
+          and is_number(states(outdoor_humidity_sensor)) %}
+      {% set temperature = states(outdoor_temperature_sensor) | float %}
+      {% set humidity = states(outdoor_humidity_sensor) | float %}
+      {% set saturation = 6.112 * e ** ((17.67 * temperature) / (temperature + 243.5)) %}
+      {{ 216.7 * saturation * humidity / 100 / (273.15 + temperature) }}
+    {% else %}
+      none
+    {% endif %}
+  start_requested: >-
+    {{ sensors_valid
+       and states(indoor_humidity_sensor) | float >= start_indoor_humidity
+       and indoor_absolute_humidity | float
+           - outdoor_absolute_humidity | float
+           >= start_absolute_humidity_difference }}
+  stop_requested: >-
+    {{ sensors_valid
+       and (states(indoor_humidity_sensor) | float <= stop_indoor_humidity
+            or indoor_absolute_humidity | float
+               - outdoor_absolute_humidity | float
+               <= stop_absolute_humidity_difference) }}
+  dwell_elapsed: >-
+    {{ as_timestamp(now())
+       - as_timestamp(states[adaptive_state].last_changed)
+       >= minimum_dwell_minutes * 60 }}
+  target_source: >-
+    {% if is_state(adaptive_state, 'on') %}
+      {{ 'schedule' if stop_requested and dwell_elapsed else 'adaptive' }}
+    {% else %}
+      {{ 'adaptive' if start_requested and dwell_elapsed else 'schedule' }}
+    {% endif %}
+
+triggers:
+  - trigger: state
+    entity_id: !input indoor_temperature_sensor
+  - trigger: state
+    entity_id: !input indoor_humidity_sensor
+  - trigger: state
+    entity_id: !input outdoor_temperature_sensor
+  - trigger: state
+    entity_id: !input outdoor_humidity_sensor
+  - trigger: state
+    entity_id: !input adaptive_state
+  - trigger: schedule.block_started
+    target:
+      entity_id: !input schedule_entity
+  - trigger: homeassistant
+    event: start
+  - trigger: time_pattern
+    minutes: /5
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ sensors_valid
+         and thresholds_valid
+         and states(adaptive_state) in ['on', 'off']
+         and states(fan_entity) not in ['unavailable', 'unknown']
+         and (not connection_sensor or is_state(connection_sensor, 'on'))
+         and (not override_entity or not is_state(override_entity, 'on')) }}
+
+actions:
+  - if:
+      - condition: template
+        value_template: >-
+          {{ target_source == 'adaptive' and is_state(adaptive_state, 'off') }}
+    then:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: !input adaptive_state
+  - if:
+      - condition: template
+        value_template: >-
+          {{ target_source == 'schedule' and is_state(adaptive_state, 'on') }}
+    then:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: !input adaptive_state
+  - variables:
+      desired_mode: >-
+        {{ 'manual' if target_source == 'adaptive'
+           else state_attr(schedule_entity, 'mode') | default('', true) | lower }}
+      desired_level: >-
+        {{ active_level if target_source == 'adaptive'
+           else state_attr(schedule_entity, 'level') | int(0) }}
+      expected_mode: >-
+        {% if desired_mode == 'manual' %}Manual {{ desired_level | int }}
+        {% elif desired_mode == 'off' %}Fans off
+        {% elif desired_mode == 'boost' %}Boost ventilation
+        {% elif desired_mode == 'humidity' %}Humidity regulation
+        {% elif desired_mode == 'co2' %}CO2 regulation
+        {% elif desired_mode == 'schedule' %}Timed program
+        {% elif desired_mode == 'snooze' %}Snooze
+        {% else %}invalid{% endif %}
+  - condition: template
+    value_template: >-
+      {{ expected_mode != 'invalid'
+         and (desired_mode != 'manual' or 1 <= desired_level | int <= 6) }}
+  - if:
+      - condition: template
+        value_template: "{{ states(mode_sensor) != expected_mode }}"
+    then:
+      - choose:
+          - conditions: "{{ desired_mode == 'manual' }}"
+            sequence:
+              - action: fan.set_percentage
+                target:
+                  entity_id: !input fan_entity
+                data:
+                  percentage: "{{ [0, 16, 33, 50, 67, 83, 100][desired_level | int] }}"
+          - conditions: "{{ desired_mode == 'off' }}"
+            sequence:
+              - action: fan.turn_off
+                target:
+                  entity_id: !input fan_entity
+        default:
+          - action: fan.set_preset_mode
+            target:
+              entity_id: !input fan_entity
+            data:
+              preset_mode: "{{ desired_mode }}"
+      - wait_template: "{{ states(mode_sensor) == expected_mode }}"
+        timeout: "00:00:45"
+        continue_on_timeout: true
+      - if:
+          - condition: template
+            value_template: "{{ states(mode_sensor) != expected_mode }}"
+        then: !input failure_actions

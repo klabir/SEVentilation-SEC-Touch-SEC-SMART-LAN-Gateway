@@ -17,7 +17,7 @@ jobs:
           python-version: "3.13"
           cache: pip
       - name: Install test dependencies
-        run: python -m pip install aiohttp pytest pytest-asyncio pyyaml
+        run: python -m pip install aiohttp jinja2 pytest pytest-asyncio pyyaml
       - name: Compile Python
         run: python -m compileall -q custom_components tests
       - name: Run tests

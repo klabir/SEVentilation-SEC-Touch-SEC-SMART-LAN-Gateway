@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add safe Free Cooling and absolute-humidity schedule-overlay Blueprints with
+  persistent hysteresis latches, minimum dwell time, Schedule restoration,
+  manual-override and cloud-health gates, duplicate suppression, and command
+  confirmation.
+- Add regression tests for Blueprint parsing and adaptive-control safety guards.
+
 ### Changed
 
 - Document the Schedule-reconciliation Blueprint's triggers, conditions,
