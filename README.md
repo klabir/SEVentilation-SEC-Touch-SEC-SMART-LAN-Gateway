@@ -268,6 +268,12 @@ https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/blob/mai
 
 [![Open your Home Assistant instance and import the Free Cooling Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fklabir%2FSEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fsec_smart%2Ffree_cooling_overlay.yaml)
 
+**In plain language:** When a room is too warm and the air outside is cooler,
+Home Assistant temporarily turns up the ventilation to bring cooler air inside.
+When the room has cooled down, or the outside air is no longer cool enough to
+help, ventilation returns to the normal daily schedule. Manual override pauses
+this automatic behavior whenever you want direct control.
+
 Free Cooling raises the area to a selected manual level only when the indoor
 temperature is high **and** outdoor air is sufficiently cooler. It is intended
 for warm-weather night or morning ventilation, not frost or humidity protection.
@@ -293,6 +299,12 @@ https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/blob/mai
 ```
 
 [![Open your Home Assistant instance and import the absolute-humidity Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fklabir%2FSEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fsec_smart%2Fabsolute_humidity_overlay.yaml)
+
+**In plain language:** When a room becomes damp and the outside air can actually
+dry it, Home Assistant temporarily turns up the ventilation. It considers both
+temperature and humidity, so it does not rely on misleading humidity percentages
+alone. When the room is dry enough, or outside air can no longer help, ventilation
+returns to the normal daily schedule. Manual override always remains available.
 
 This overlay uses indoor/outdoor temperature and relative humidity to calculate
 absolute humidity in g/m³. It raises ventilation only when indoor relative
