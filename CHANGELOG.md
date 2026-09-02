@@ -17,6 +17,7 @@
   manual-override semantics.
 - Make Example B (morning purge and reduced night operation) the canonical
   Blueprint schedule profile in the Blueprint UI and README.
+- Add one-click Home Assistant import buttons for all three Blueprints.
 
 ## [0.3.0] - 2026-09-02
 

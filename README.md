@@ -147,6 +147,8 @@ Blueprint source:
 https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/blob/main/blueprints/automation/sec_smart/schedule_reconciliation.yaml
 ```
 
+[![Open your Home Assistant instance and import the Schedule-reconciliation Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fklabir%2FSEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fsec_smart%2Fschedule_reconciliation.yaml)
+
 Import it under **Settings > Automations & scenes > Blueprints**, then create one automation per area and select the Schedule helper, SEC Smart fan, area mode sensor, Schedule-override switch, and optional failure actions.
 
 Configure these inputs with entities from the same SEC area:
@@ -264,6 +266,8 @@ Blueprint source:
 https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/blob/main/blueprints/automation/sec_smart/free_cooling_overlay.yaml
 ```
 
+[![Open your Home Assistant instance and import the Free Cooling Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fklabir%2FSEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fsec_smart%2Ffree_cooling_overlay.yaml)
+
 Free Cooling raises the area to a selected manual level only when the indoor
 temperature is high **and** outdoor air is sufficiently cooler. It is intended
 for warm-weather night or morning ventilation, not frost or humidity protection.
@@ -287,6 +291,8 @@ Blueprint source:
 ```text
 https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/blob/main/blueprints/automation/sec_smart/absolute_humidity_overlay.yaml
 ```
+
+[![Open your Home Assistant instance and import the absolute-humidity Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fklabir%2FSEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fsec_smart%2Fabsolute_humidity_overlay.yaml)
 
 This overlay uses indoor/outdoor temperature and relative humidity to calculate
 absolute humidity in g/m³. It raises ventilation only when indoor relative
