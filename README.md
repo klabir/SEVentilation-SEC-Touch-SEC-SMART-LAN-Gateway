@@ -16,7 +16,7 @@ Cloud-polling Home Assistant integration for SEVentilation systems connected thr
 - vendor-timer ownership sensor per area
 - gateway/controller firmware and hardware metadata
 - optional area control with six manual levels and SEC operating modes
-- persistent per-area **Schedule override** switches
+- persistent per-area **Schedule override** switches with configurable auto-off
 - optional settings controls for thresholds, Snooze duration, summer mode, and filter lifetime
 - disabled-by-default filter-life reset button
 - Blueprint-based Home Assistant scheduling beyond the five vendor timer slots
@@ -40,7 +40,8 @@ Then add **SEC Smart Ventilation** under **Settings > Devices & services**. Ente
 
 The initial setup is read-only. Open the integration's **Configure** dialog to opt in to:
 
-- **Allow ventilation control**: creates one `fan` and one local Schedule-override switch per active area.
+- **Allow ventilation control**: creates one `fan`, one local Schedule-override
+  switch, and one Schedule-override timeout number per active area.
 - **Allow system settings control**: exposes CO2/humidity thresholds, Snooze duration, summer mode, and filter maximum runtime.
 - **Polling interval**: 30–600 seconds; 60 seconds is recommended.
 
@@ -220,7 +221,32 @@ Important boundary behavior:
 
 ### Manual override
 
-Turn on an area's **Schedule override** switch before changing that area in the vendor app, SEC-Touch, or HA fan entity. The Blueprint leaves it untouched until the switch is turned off. The switch is local to HA and persists across restarts. If the switch remains off, a manual change can be reverted by the next five-minute reconciliation.
+Turn on an area's **Schedule override** switch before changing that area in the
+vendor app, SEC-Touch, or HA fan entity. The Blueprint leaves it untouched until
+the switch is turned off. The switch and its timeout are local to Home Assistant;
+neither turning it off nor automatic expiry writes a mode to SEC Smart.
+
+Set the area's **Schedule override timeout** from 0 to 1440 minutes:
+
+- `0` (the default) keeps the override on until it is turned off manually.
+- A positive value turns the override off at the saved deadline. Turning the
+  override on again renews the full duration.
+- Changing a positive timeout while the override is on restarts it from that
+  moment. Changing it to `0` cancels the deadline without turning the override off.
+- Turning the override off manually cancels its deadline.
+
+Override state, timeout, and the absolute UTC deadline persist together. A future
+deadline is restored after reload; a deadline that elapsed while Home Assistant
+was stopped is retired immediately. Existing installations migrate the former
+restored switch state once: an on switch remains on indefinitely until a timeout
+is configured or it is turned off. A malformed active deadline is also preserved
+indefinitely and logged instead of unexpectedly returning control to scheduling.
+
+The switch and timeout remain usable during a later SEC cloud outage. Initial
+integration startup still requires the first cloud refresh, so they are not
+created if that startup refresh fails. When an override ends, the normal schedule
+resumes on the Blueprint's next existing trigger (normally within five minutes or
+at the next block boundary); expiry itself sends no SEC command.
 
 ## Adaptive schedule overlays
 

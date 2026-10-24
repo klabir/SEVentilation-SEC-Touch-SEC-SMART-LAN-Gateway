@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-import logging
 from time import monotonic
 from typing import Any, cast
 
-from homeassistant.config_entries import ConfigEntryAuthFailed
+from homeassistant.config_entries import ConfigEntry, ConfigEntryAuthFailed
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import SecSmartApi, SecSmartAuthError
 from .models import AreaCommandState, SecSmartDevice, SecSmartSettings
+from .schedule_override import ScheduleOverrideManager
 from .util import boolean_value, numeric_value
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,10 +34,13 @@ class SecSmartCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         api: SecSmartApi,
         device: SecSmartDevice,
         interval: int,
+        override_manager: ScheduleOverrideManager,
+        config_entry: ConfigEntry[Any] | None,
     ) -> None:
         self.api = api
         self.device_id = str(device["id"])
         self.device_name = str(device.get("name") or self.device_id)
+        self.override_manager = override_manager
         self.last_successful_update: datetime | None = None
         self.endpoint_health: dict[str, bool] = {}
         self.area_commands: dict[str, AreaCommandState] = {}
@@ -47,6 +51,7 @@ class SecSmartCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=config_entry,
             name=f"SEC Smart {self.device_name}",
             update_interval=timedelta(seconds=interval),
         )
@@ -54,7 +59,9 @@ class SecSmartCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         now = monotonic()
         previous = dict(self.data) if self.data else {}
-        data: dict[str, Any] = previous | {"endpoint_health": dict(self.endpoint_health)}
+        data: dict[str, Any] = previous | {
+            "endpoint_health": dict(self.endpoint_health)
+        }
 
         try:
             areas, telemetry = await asyncio.gather(
@@ -68,7 +75,9 @@ class SecSmartCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 raise ConfigEntryAuthFailed
             if isinstance(areas, Exception):
                 self.endpoint_health["areas"] = False
-                raise UpdateFailed(f"Unable to read SEC Smart areas: {areas}") from areas
+                raise UpdateFailed(
+                    f"Unable to read SEC Smart areas: {areas}"
+                ) from areas
             data["areas"] = self._normalize_areas(areas)
             self.endpoint_health["areas"] = True
             if isinstance(telemetry, Exception):
@@ -78,7 +87,10 @@ class SecSmartCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 data["telemetry"] = telemetry
                 self.endpoint_health["telemetry"] = True
 
-            if not self.data or now - self._last_notification_poll >= NOTIFICATION_INTERVAL:
+            if (
+                not self.data
+                or now - self._last_notification_poll >= NOTIFICATION_INTERVAL
+            ):
                 await self._refresh_optional(
                     data,
                     "notifications",
@@ -164,9 +176,7 @@ class SecSmartCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._record_command(area_key, "failed", mode, type(err).__name__)
                 raise
             self._record_command(area_key, "failed", mode, "confirmation_timeout")
-            raise UpdateFailed(
-                f"SEC Smart did not confirm {mode!r} for area {area_id}"
-            )
+            raise UpdateFailed(f"SEC Smart did not confirm {mode!r} for area {area_id}")
 
     async def async_set_threshold(self, key: str, value: int) -> None:
         async with self._settings_lock:
@@ -182,18 +192,19 @@ class SecSmartCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 lambda: self.api.async_set_thresholds(
                     self.device_id, humidity=humidity, co2=co2
                 ),
-                lambda current: numeric_value(
-                    current.get("thresholds", {}).get(key), integer=True
-                )
-                == value,
+                lambda current: (
+                    numeric_value(current.get("thresholds", {}).get(key), integer=True)
+                    == value
+                ),
             )
 
     async def async_set_sleep_time(self, minutes: int) -> None:
         async with self._settings_lock:
             await self._write_and_confirm_settings(
                 lambda: self.api.async_set_sleep_time(self.device_id, minutes),
-                lambda current: numeric_value(current.get("sleepTime"), integer=True)
-                == minutes,
+                lambda current: (
+                    numeric_value(current.get("sleepTime"), integer=True) == minutes
+                ),
             )
 
     async def async_set_summer_mode(self, enabled: bool) -> None:
@@ -209,10 +220,12 @@ class SecSmartCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 lambda: self.api.async_set_filter(
                     self.device_id, max_run_time=days, reset=reset
                 ),
-                lambda current: numeric_value(
-                    current.get("filter", {}).get("maxRunTime"), integer=True
-                )
-                == days,
+                lambda current: (
+                    numeric_value(
+                        current.get("filter", {}).get("maxRunTime"), integer=True
+                    )
+                    == days
+                ),
             )
 
     async def _write_and_confirm_settings(

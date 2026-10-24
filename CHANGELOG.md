@@ -4,6 +4,9 @@
 
 ### Added
 
+- Add a persistent 0–1440 minute per-area Schedule override timeout with
+  restart-safe absolute deadlines, renewal, local auto-off, and legacy switch
+  state migration.
 - Add safe Free Cooling and absolute-humidity schedule-overlay Blueprints with
   persistent hysteresis latches, minimum dwell time, Schedule restoration,
   manual-override and cloud-health gates, duplicate suppression, and command

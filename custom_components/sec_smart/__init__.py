@@ -19,6 +19,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import SecSmartCoordinator
+from .schedule_override import ScheduleOverrideManager
 
 type SecSmartConfigEntry = ConfigEntry[dict[str, SecSmartCoordinator]]
 
@@ -26,7 +27,7 @@ type SecSmartConfigEntry = ConfigEntry[dict[str, SecSmartCoordinator]]
 def _requested_platforms(entry: ConfigEntry[Any]) -> list[Platform]:
     platforms: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
     if entry.options.get(CONF_ALLOW_CONTROL, False):
-        platforms.extend((Platform.FAN, Platform.SWITCH))
+        platforms.extend((Platform.FAN, Platform.SWITCH, Platform.NUMBER))
     if entry.options.get(CONF_ALLOW_SETTINGS, False):
         platforms.extend((Platform.NUMBER, Platform.SWITCH, Platform.BUTTON))
     return list(dict.fromkeys(platforms))
@@ -40,15 +41,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: SecSmartConfigEntry) -> 
         async_get_clientsession(hass),
     )
     interval = entry.options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)
+    override_manager = ScheduleOverrideManager(hass, entry.entry_id)
     coordinators: dict[str, SecSmartCoordinator] = {}
     for device in entry.data[CONF_DEVICES]:
-        coordinator = SecSmartCoordinator(hass, api, device, interval)
+        coordinator = SecSmartCoordinator(
+            hass, api, device, interval, override_manager, entry
+        )
         await coordinator.async_config_entry_first_refresh()
         coordinators[coordinator.device_id] = coordinator
 
-    entry.runtime_data = coordinators
     platforms = _requested_platforms(entry)
-    await hass.config_entries.async_forward_entry_setups(entry, platforms)
+    try:
+        await override_manager.async_load()
+        entry.runtime_data = coordinators
+        await hass.config_entries.async_forward_entry_setups(entry, platforms)
+    except Exception:
+        override_manager.async_shutdown()
+        raise
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = platforms
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
@@ -61,6 +70,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: SecSmartConfigEntry) ->
     )
     unloaded = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unloaded:
+        managers = {
+            coordinator.override_manager for coordinator in entry.runtime_data.values()
+        }
+        for manager in managers:
+            manager.async_shutdown()
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     return unloaded
 
