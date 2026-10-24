@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-24
+
 ### Added
 
 - Add a persistent 0–1440 minute per-area Schedule override timeout with
@@ -12,6 +14,8 @@
   manual-override and cloud-health gates, duplicate suppression, and command
   confirmation.
 - Add regression tests for Blueprint parsing and adaptive-control safety guards.
+- Add a Home Assistant 2026.10.2 lifecycle-test lane covering five schedule
+  override persistence, expiry, migration, and outage scenarios.
 
 ### Changed
 
@@ -21,6 +25,11 @@
 - Make Example B (morning purge and reduced night operation) the canonical
   Blueprint schedule profile in the Blueprint UI and README.
 - Add one-click Home Assistant import buttons for all three Blueprints.
+
+### Fixed
+
+- Run the Home Assistant lifecycle suite through the active Python interpreter
+  so the pinned test environment is used consistently in CI.
 
 ## [0.3.0] - 2026-09-02
 

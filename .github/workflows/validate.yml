@@ -58,7 +58,7 @@ jobs:
       - name: Compile Home Assistant tests
         run: python -m compileall -q custom_components ha_tests
       - name: Run Home Assistant lifecycle tests
-        run: pytest -q ha_tests
+        run: python -m pytest -q ha_tests
 
   hacs:
     runs-on: ubuntu-latest

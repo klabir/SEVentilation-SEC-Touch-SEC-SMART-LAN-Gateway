@@ -5,6 +5,10 @@ Cloud-polling Home Assistant integration for SEVentilation systems connected thr
 > [!IMPORTANT]
 > The SEC cloud API is the transport and may change without notice. The physical SEC-Touch and vendor app remain the authoritative fallback. Factory reset, hardware assignment, and low-level commissioning endpoints are intentionally excluded.
 
+Latest release: **[v0.4.0](https://github.com/klabir/SEVentilation-SEC-Touch-SEC-SMART-LAN-Gateway/releases/tag/v0.4.0)** —
+configurable Schedule-override expiry, adaptive ventilation Blueprints, and Home
+Assistant lifecycle coverage.
+
 ## Features
 
 - Home Assistant Config Flow with masked API-token entry and reauthentication
@@ -35,6 +39,14 @@ Cloud-polling Home Assistant integration for SEVentilation systems connected thr
 For a manual installation, copy `custom_components/sec_smart` to `/config/custom_components/` and restart Home Assistant once.
 
 Then add **SEC Smart Ventilation** under **Settings > Devices & services**. Enter the API token only in Home Assistant's masked configuration form; never put it in YAML, source code, URLs, or logs.
+
+### Updating to v0.4.0
+
+In HACS, open **SEC Smart Ventilation**, download v0.4.0 or newer, and restart
+Home Assistant Core once. The existing config entry, automations, device/vendor
+timers, and integration options are preserved; no `.storage` editing or
+reconfiguration is required. The new timeout defaults to `0`, so this update
+does not add automatic expiry to an existing or new Schedule override.
 
 ## Integration options
 
@@ -226,6 +238,12 @@ vendor app, SEC-Touch, or HA fan entity. The Blueprint leaves it untouched until
 the switch is turned off. The switch and its timeout are local to Home Assistant;
 neither turning it off nor automatic expiry writes a mode to SEC Smart.
 
+The controls are created only after **Settings > Devices & services > SEC Smart
+Ventilation > Configure > Allow ventilation control** is enabled. Then open the
+room's SEC Smart device (or search **Settings > Devices & services > Entities**)
+to find its **Schedule override** switch and **Schedule override timeout**
+number.
+
 Set the area's **Schedule override timeout** from 0 to 1440 minutes:
 
 - `0` (the default) keeps the override on until it is turned off manually.
@@ -234,6 +252,14 @@ Set the area's **Schedule override timeout** from 0 to 1440 minutes:
 - Changing a positive timeout while the override is on restarts it from that
   moment. Changing it to `0` cancels the deadline without turning the override off.
 - Turning the override off manually cancels its deadline.
+
+For example, set `number.sec_smart_example_room_schedule_override_timeout` to
+`30`, then turn on `switch.sec_smart_example_room_schedule_override`. Its
+`expires_at` state attribute shows the absolute UTC deadline. Setting `30` while
+the switch is already on starts a new 30-minute period immediately; setting it
+while the switch is off stores the duration for the next activation. Turning
+the switch on repeatedly renews the period, turning it off cancels it, and `0`
+means indefinite override.
 
 Override state, timeout, and the absolute UTC deadline persist together. A future
 deadline is restored after reload; a deadline that elapsed while Home Assistant
@@ -246,7 +272,9 @@ The switch and timeout remain usable during a later SEC cloud outage. Initial
 integration startup still requires the first cloud refresh, so they are not
 created if that startup refresh fails. When an override ends, the normal schedule
 resumes on the Blueprint's next existing trigger (normally within five minutes or
-at the next block boundary); expiry itself sends no SEC command.
+at the next block boundary); expiry only turns off the override switch and sends
+no fan command. If a deadline elapses while Home Assistant is down, the restored
+override becomes off after startup and the first successful cloud refresh.
 
 ## Adaptive schedule overlays
 
@@ -389,12 +417,28 @@ Automations should check the cloud-connection sensor, avoid decisions from unava
 
 ## Development
 
+Use a separate virtual environment for the lightweight Python 3.13 checks:
+
 ```bash
-python -m compileall -q custom_components tests
-pytest -q
+python3.13 -m venv .venv/light
+.venv/light/bin/python -m pip install aiohttp jinja2 pytest pytest-asyncio pyyaml
+.venv/light/bin/python -m compileall -q custom_components tests
+.venv/light/bin/python -m pytest -q tests
 ```
 
-CI validates Python, JSON, YAML, tests, and HACS structure.
+The Home Assistant lifecycle harness is separate and pinned to the tested
+Home Assistant release. It requires Python 3.14.2 or newer; the `python3.14`
+command below must resolve to a sufficiently patched interpreter:
+
+```bash
+python3.14 -m venv .venv/ha
+.venv/ha/bin/python -m pip install aiohttp freezegun homeassistant==2026.10.2 pytest pytest-asyncio pytest-homeassistant-custom-component==0.13.373
+.venv/ha/bin/python -m compileall -q custom_components ha_tests
+.venv/ha/bin/python -m pytest -q ha_tests
+```
+
+The release baseline is 21 lightweight tests plus 5 Home Assistant lifecycle
+tests. CI also validates JSON, YAML, and HACS structure.
 
 ## Rollback
 
